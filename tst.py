@@ -348,6 +348,562 @@ def calcular_metricas_estatisticas(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
+# FILTROS
+# ============================================================
+
+def aplicar_filtros(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    st.subheader("Filtros")
+
+    col_filtro_1, col_filtro_2 = st.columns(2)
+
+    with col_filtro_1:
+        times_disponiveis = sorted(df["TIME"].dropna().unique())
+
+        times_selecionados = st.multiselect(
+            "Filtrar por time",
+            options=times_disponiveis,
+            default=times_disponiveis,
+        )
+
+    df_filtrado = df[df["TIME"].isin(times_selecionados)].copy()
+
+    with col_filtro_2:
+        jogadores_disponiveis = sorted(df_filtrado["JOGADOR"].dropna().unique())
+
+        jogadores_selecionados = st.multiselect(
+            "Filtrar por jogador",
+            options=jogadores_disponiveis,
+            default=jogadores_disponiveis,
+        )
+
+    df_filtrado = df_filtrado[
+        df_filtrado["JOGADOR"].isin(jogadores_selecionados)
+    ].copy()
+
+    return df_filtrado
+
+
+# ============================================================
+# COMPONENTES DO DASHBOARD
+# ============================================================
+
+def exibir_cards_gerais(df: pd.DataFrame) -> None:
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    col1.metric("Jogadores", len(df))
+    col2.metric("Total de Pontos", int(df["PONTOS"].sum()))
+    col3.metric("Total de Rebotes", int(df["REBOTES"].sum()))
+    col4.metric("Total de Assistências", int(df["ASSISTENCIAS"].sum()))
+    col5.metric("Times no Dashboard", df["TIME"].nunique())
+
+
+def exibir_destaques(df: pd.DataFrame) -> None:
+    st.subheader("Destaques estatísticos ao vivo")
+
+    col_a, col_b, col_c, col_d = st.columns(4)
+
+    top_pontos = df.sort_values("PONTOS", ascending=False).head(1)
+    top_pra = df.sort_values("PRA", ascending=False).head(1)
+    top_impacto = df.sort_values("IMPACTO_ESTATISTICO", ascending=False).head(1)
+    top_aproveitamento = df[df["TOTAL_ARREMESSOS"] > 0].sort_values(
+        "APROVEITAMENTO_GERAL_%",
+        ascending=False,
+    ).head(1)
+
+    if not top_pontos.empty:
+        col_a.metric(
+            "Maior pontuador",
+            top_pontos.iloc[0]["JOGADOR"],
+            f'{top_pontos.iloc[0]["PONTOS"]} pontos',
+        )
+
+    if not top_pra.empty:
+        col_b.metric(
+            "Maior PRA",
+            top_pra.iloc[0]["JOGADOR"],
+            f'{top_pra.iloc[0]["PRA"]} P+R+A',
+        )
+
+    if not top_impacto.empty:
+        col_c.metric(
+            "Maior impacto",
+            top_impacto.iloc[0]["JOGADOR"],
+            f'{top_impacto.iloc[0]["IMPACTO_ESTATISTICO"]}',
+        )
+
+    if not top_aproveitamento.empty:
+        col_d.metric(
+            "Melhor aproveitamento",
+            top_aproveitamento.iloc[0]["JOGADOR"],
+            f'{top_aproveitamento.iloc[0]["APROVEITAMENTO_GERAL_%"]}%',
+        )
+
+
+def exibir_ranking(df: pd.DataFrame) -> None:
+    st.subheader("Ranking estatístico geral dos jogadores")
+
+    colunas_ranking = [
+        "TIME",
+        "JOGADOR",
+        "MINUTOS",
+        "PONTOS",
+        "REBOTES",
+        "ASSISTENCIAS",
+        "PRA",
+        "ROUBOS",
+        "BLOQUEIOS",
+        "TURNOVERS",
+        "FALTAS",
+        "PLUS_MINUS",
+        "TOTAL_ARREMESSOS",
+        "TOTAL_CONVERTIDOS",
+        "APROVEITAMENTO_GERAL_%",
+        "APROVEITAMENTO_2P_%",
+        "APROVEITAMENTO_3P_%",
+        "PARTICIPACAO_OFENSIVA",
+        "CONTRIBUICAO_SEM_PONTUAR",
+        "ERROS_E_RISCOS",
+        "IMPACTO_ESTATISTICO",
+    ]
+
+    df_ranking = df[colunas_ranking].sort_values(
+        by="IMPACTO_ESTATISTICO",
+        ascending=False,
+    )
+
+    st.dataframe(
+        df_ranking,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+def exibir_grafico_pontos(df: pd.DataFrame) -> None:
+    st.subheader("Pontos por jogador")
+
+    df_pontos = df.sort_values("PONTOS", ascending=False)
+
+    fig = px.bar(
+        df_pontos,
+        x="JOGADOR",
+        y="PONTOS",
+        color="TIME",
+        text="PONTOS",
+        hover_data=[
+            "TIME",
+            "MINUTOS",
+            "REBOTES",
+            "ASSISTENCIAS",
+            "PRA",
+            "APROVEITAMENTO_GERAL_%",
+        ],
+        title="Pontuação dos jogadores",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="Pontos",
+        legend_title="Time",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_pra(df: pd.DataFrame) -> None:
+    st.subheader("PRA por jogador")
+
+    df_pra = df.sort_values("PRA", ascending=False)
+
+    fig = px.bar(
+        df_pra,
+        x="JOGADOR",
+        y="PRA",
+        color="TIME",
+        text="PRA",
+        hover_data=[
+            "PONTOS",
+            "REBOTES",
+            "ASSISTENCIAS",
+            "MINUTOS",
+            "PLUS_MINUS",
+        ],
+        title="Pontos + Rebotes + Assistências por jogador",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="PRA",
+        legend_title="Time",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_impacto(df: pd.DataFrame) -> None:
+    st.subheader("Impacto estatístico por jogador")
+
+    df_impacto = df.sort_values(
+        "IMPACTO_ESTATISTICO",
+        ascending=False,
+    )
+
+    fig = px.bar(
+        df_impacto,
+        x="JOGADOR",
+        y="IMPACTO_ESTATISTICO",
+        color="TIME",
+        text="IMPACTO_ESTATISTICO",
+        hover_data=[
+            "PONTOS",
+            "REBOTES",
+            "ASSISTENCIAS",
+            "ROUBOS",
+            "BLOQUEIOS",
+            "TURNOVERS",
+            "FALTAS",
+            "PLUS_MINUS",
+        ],
+        title="Impacto estatístico dos jogadores",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="Impacto estatístico",
+        legend_title="Time",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_aproveitamento(df: pd.DataFrame) -> None:
+    st.subheader("Aproveitamento geral de arremessos")
+
+    df_aproveitamento = df[df["TOTAL_ARREMESSOS"] > 0].sort_values(
+        "APROVEITAMENTO_GERAL_%",
+        ascending=False,
+    )
+
+    if df_aproveitamento.empty:
+        st.info("Ainda não há arremessos suficientes para calcular aproveitamento.")
+        return
+
+    fig = px.bar(
+        df_aproveitamento,
+        x="JOGADOR",
+        y="APROVEITAMENTO_GERAL_%",
+        color="TIME",
+        text="APROVEITAMENTO_GERAL_%",
+        hover_data=[
+            "TOTAL_CONVERTIDOS",
+            "TOTAL_ARREMESSOS",
+            "APROVEITAMENTO_2P_%",
+            "APROVEITAMENTO_3P_%",
+        ],
+        title="Aproveitamento geral de arremessos por jogador",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="Aproveitamento %",
+        legend_title="Time",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_comparativo_pra(df: pd.DataFrame) -> None:
+    st.subheader("Comparação: pontos, rebotes e assistências")
+
+    df_comparativo = df.sort_values("PRA", ascending=False)
+
+    fig = px.bar(
+        df_comparativo,
+        x="JOGADOR",
+        y=["PONTOS", "REBOTES", "ASSISTENCIAS"],
+        barmode="group",
+        title="Comparativo de pontos, rebotes e assistências",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="Quantidade",
+        legend_title="Indicador",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_rebotes_assistencias(df: pd.DataFrame) -> None:
+    st.subheader("Rebotes x Assistências")
+
+    fig = px.scatter(
+        df,
+        x="REBOTES",
+        y="ASSISTENCIAS",
+        size="PONTOS",
+        color="TIME",
+        hover_name="JOGADOR",
+        hover_data=[
+            "MINUTOS",
+            "PONTOS",
+            "PRA",
+            "ROUBOS",
+            "BLOQUEIOS",
+            "TURNOVERS",
+            "PLUS_MINUS",
+        ],
+        title="Relação entre rebotes, assistências e pontos",
+    )
+
+    fig.update_layout(
+        xaxis_title="Rebotes",
+        yaxis_title="Assistências",
+        legend_title="Time",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_participacao_ofensiva(df: pd.DataFrame) -> None:
+    st.subheader("Participação ofensiva")
+
+    df_ofensiva = df.sort_values(
+        "PARTICIPACAO_OFENSIVA",
+        ascending=False,
+    )
+
+    fig = px.bar(
+        df_ofensiva,
+        x="JOGADOR",
+        y="PARTICIPACAO_OFENSIVA",
+        color="TIME",
+        text="PARTICIPACAO_OFENSIVA",
+        hover_data=[
+            "PONTOS",
+            "ASSISTENCIAS",
+            "PRA",
+            "MINUTOS",
+        ],
+        title="Participação ofensiva: pontos + assistências",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="Pontos + Assistências",
+        legend_title="Time",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_contribuicao_sem_pontuar(df: pd.DataFrame) -> None:
+    st.subheader("Contribuição sem pontuar")
+
+    df_sem_pontuar = df.sort_values(
+        "CONTRIBUICAO_SEM_PONTUAR",
+        ascending=False,
+    )
+
+    fig = px.bar(
+        df_sem_pontuar,
+        x="JOGADOR",
+        y="CONTRIBUICAO_SEM_PONTUAR",
+        color="TIME",
+        text="CONTRIBUICAO_SEM_PONTUAR",
+        hover_data=[
+            "REBOTES",
+            "ASSISTENCIAS",
+            "ROUBOS",
+            "BLOQUEIOS",
+            "MINUTOS",
+        ],
+        title="Contribuição sem pontuar: rebotes + assistências + roubos + bloqueios",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="Contribuição",
+        legend_title="Time",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_erros_riscos(df: pd.DataFrame) -> None:
+    st.subheader("Erros e riscos por jogador")
+
+    df_erros = df.sort_values(
+        "ERROS_E_RISCOS",
+        ascending=False,
+    )
+
+    fig = px.bar(
+        df_erros,
+        x="JOGADOR",
+        y="ERROS_E_RISCOS",
+        color="TIME",
+        text="ERROS_E_RISCOS",
+        hover_data=[
+            "TURNOVERS",
+            "FALTAS",
+            "MINUTOS",
+        ],
+        title="Erros e riscos: turnovers + faltas",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="Turnovers + Faltas",
+        legend_title="Time",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_cestas_2p(df: pd.DataFrame) -> None:
+    st.subheader("Cestas de 2 pontos")
+
+    df_2p = df.sort_values("CESTA_2_TENT", ascending=False)
+
+    fig = px.bar(
+        df_2p,
+        x="JOGADOR",
+        y=["CESTA_2_CONV", "CESTA_2_TENT"],
+        barmode="group",
+        title="Cestas de 2 pontos convertidas x tentadas",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="Quantidade",
+        legend_title="Indicador",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_grafico_cestas_3p(df: pd.DataFrame) -> None:
+    st.subheader("Cestas de 3 pontos")
+
+    df_3p = df.sort_values("CESTA_3_TENT", ascending=False)
+
+    fig = px.bar(
+        df_3p,
+        x="JOGADOR",
+        y=["CESTA_3_CONV", "CESTA_3_TENT"],
+        barmode="group",
+        title="Cestas de 3 pontos convertidas x tentadas",
+    )
+
+    fig.update_layout(
+        xaxis_title="Jogador",
+        yaxis_title="Quantidade",
+        legend_title="Indicador",
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def exibir_tabela_detalhada(df: pd.DataFrame) -> None:
+    st.subheader("Tabela detalhada do jogo")
+
+    colunas_tabela = [
+        "STATUS",
+        "PERIODO",
+        "RELOGIO",
+        "TIME",
+        "JOGADOR",
+        "MINUTOS",
+        "PONTOS",
+        "REBOTES",
+        "ASSISTENCIAS",
+        "PRA",
+        "CESTA_2_CONV",
+        "CESTA_2_TENT",
+        "CESTA_3_CONV",
+        "CESTA_3_TENT",
+        "TOTAL_CONVERTIDOS",
+        "TOTAL_ARREMESSOS",
+        "APROVEITAMENTO_GERAL_%",
+        "APROVEITAMENTO_2P_%",
+        "APROVEITAMENTO_3P_%",
+        "ROUBOS",
+        "BLOQUEIOS",
+        "TURNOVERS",
+        "FALTAS",
+        "PLUS_MINUS",
+        "IMPACTO_ESTATISTICO",
+        "DATA_ATUALIZACAO",
+        "GAME_ID",
+    ]
+
+    st.dataframe(
+        df[colunas_tabela].sort_values(
+            by=["TIME", "IMPACTO_ESTATISTICO"],
+            ascending=[True, False],
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+def exibir_mensagem_sem_dados() -> None:
+    st.info("Nenhum dado encontrado para os times monitorados no momento.")
+
+    st.write("Possíveis motivos:")
+    st.write("- Não há jogo ao vivo agora envolvendo esses times.")
+    st.write("- O jogo ainda não começou.")
+    st.write("- O boxscore ainda não foi disponibilizado pela NBA.")
+    st.write("- A NBA retornou instabilidade temporária ou bloqueou a consulta.")
+    st.write("- Os times monitorados não jogam hoje.")
+
+
+def exibir_dashboard(df: pd.DataFrame) -> None:
+    ultima_atualizacao = df["DATA_ATUALIZACAO"].max()
+
+    st.success(f"Dados atualizados em: {ultima_atualizacao}")
+
+    exibir_cards_gerais(df)
+
+    st.divider()
+
+    df_filtrado = aplicar_filtros(df)
+
+    if df_filtrado.empty:
+        st.warning("Nenhum dado encontrado para os filtros selecionados.")
+        return
+
+    st.divider()
+
+    exibir_destaques(df_filtrado)
+
+    st.divider()
+
+    exibir_ranking(df_filtrado)
+
+    st.divider()
+
+    exibir_grafico_pontos(df_filtrado)
+    exibir_grafico_pra(df_filtrado)
+    exibir_grafico_impacto(df_filtrado)
+    exibir_grafico_aproveitamento(df_filtrado)
+    exibir_grafico_comparativo_pra(df_filtrado)
+    exibir_grafico_rebotes_assistencias(df_filtrado)
+    exibir_grafico_participacao_ofensiva(df_filtrado)
+    exibir_grafico_contribuicao_sem_pontuar(df_filtrado)
+    exibir_grafico_erros_riscos(df_filtrado)
+    exibir_grafico_cestas_2p(df_filtrado)
+    exibir_grafico_cestas_3p(df_filtrado)
+
+    st.divider()
+
+    exibir_tabela_detalhada(df_filtrado)
+
+
+# ============================================================
 # CONFIGURAÇÃO STREAMLIT
 # ============================================================
 
@@ -355,7 +911,6 @@ st.set_page_config(
     page_title="Dashboard NBA Estatístico",
     layout="wide",
 )
-
 
 st.markdown(
     """
@@ -407,543 +962,10 @@ with st.spinner("Consultando dados da NBA..."):
     df = buscar_dados_ao_vivo()
     df = calcular_metricas_estatisticas(df)
 
-
-# ============================================================
-# EXIBIÇÃO SEM DADOS
-# ============================================================
-
 if df.empty:
-    st.info("Nenhum dado encontrado para os times monitorados no momento.")
-
-    st.write("Possíveis motivos:")
-    st.write("- Não há jogo ao vivo agora envolvendo esses times.")
-    st.write("- O jogo ainda não começou.")
-    st.write("- O boxscore ainda não foi disponibilizado pela NBA.")
-    st.write("- A NBA retornou instabilidade temporária ou bloqueou a consulta.")
-    st.write("- Os times monitorados não jogam hoje.")
-
-
-# ============================================================
-# EXIBIÇÃO COM DADOS
-# ============================================================
-
+    exibir_mensagem_sem_dados()
 else:
-    ultima_atualizacao = df["DATA_ATUALIZACAO"].max()
-
-    st.success(f"Dados atualizados em: {ultima_atualizacao}")
-
-    # --------------------------------------------------------
-    # CARDS GERAIS
-    # --------------------------------------------------------
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    col1.metric("Jogadores", len(df))
-    col2.metric("Total de Pontos", int(df["PONTOS"].sum()))
-    col3.metric("Total de Rebotes", int(df["REBOTES"].sum()))
-    col4.metric("Total de Assistências", int(df["ASSISTENCIAS"].sum()))
-    col5.metric("Times no Dashboard", df["TIME"].nunique())
-
-    st.divider()
-
-    # --------------------------------------------------------
-    # FILTRO POR TIME
-    # --------------------------------------------------------
-
-    times_disponiveis = sorted(df["TIME"].dropna().unique())
-
-    times_selecionados = st.multiselect(
-        "Filtrar por time",
-        options=times_disponiveis,
-        default=times_disponiveis,
-    )
-
-    df_filtrado = df[df["TIME"].isin(times_selecionados)].copy()
-
-    if df_filtrado.empty:
-        st.warning("Nenhum dado encontrado para o filtro selecionado.")
-
-    else:
-        # ====================================================
-        # DESTAQUES ESTATÍSTICOS
-        # ====================================================
-
-        st.subheader("Destaques estatísticos ao vivo")
-
-        col_a, col_b, col_c, col_d = st.columns(4)
-
-        top_pontos = df_filtrado.sort_values("PONTOS", ascending=False).head(1)
-        top_pra = df_filtrado.sort_values("PRA", ascending=False).head(1)
-        top_impacto = df_filtrado.sort_values("IMPACTO_ESTATISTICO", ascending=False).head(1)
-        top_aproveitamento = df_filtrado[df_filtrado["TOTAL_ARREMESSOS"] > 0].sort_values(
-            "APROVEITAMENTO_GERAL_%",
-            ascending=False,
-        ).head(1)
-
-        if not top_pontos.empty:
-            col_a.metric(
-                "Maior pontuador",
-                top_pontos.iloc[0]["JOGADOR"],
-                f'{top_pontos.iloc[0]["PONTOS"]} pontos',
-            )
-
-        if not top_pra.empty:
-            col_b.metric(
-                "Maior PRA",
-                top_pra.iloc[0]["JOGADOR"],
-                f'{top_pra.iloc[0]["PRA"]} P+R+A',
-            )
-
-        if not top_impacto.empty:
-            col_c.metric(
-                "Maior impacto",
-                top_impacto.iloc[0]["JOGADOR"],
-                f'{top_impacto.iloc[0]["IMPACTO_ESTATISTICO"]}',
-            )
-
-        if not top_aproveitamento.empty:
-            col_d.metric(
-                "Melhor aproveitamento",
-                top_aproveitamento.iloc[0]["JOGADOR"],
-                f'{top_aproveitamento.iloc[0]["APROVEITAMENTO_GERAL_%"]}%',
-            )
-
-        st.divider()
-
-        # ====================================================
-        # TABELA RANKING ESTATÍSTICO
-        # ====================================================
-
-        st.subheader("Ranking estatístico geral dos jogadores")
-
-        colunas_ranking = [
-            "TIME",
-            "JOGADOR",
-            "MINUTOS",
-            "PONTOS",
-            "REBOTES",
-            "ASSISTENCIAS",
-            "PRA",
-            "ROUBOS",
-            "BLOQUEIOS",
-            "TURNOVERS",
-            "FALTAS",
-            "PLUS_MINUS",
-            "TOTAL_ARREMESSOS",
-            "TOTAL_CONVERTIDOS",
-            "APROVEITAMENTO_GERAL_%",
-            "APROVEITAMENTO_2P_%",
-            "APROVEITAMENTO_3P_%",
-            "PARTICIPACAO_OFENSIVA",
-            "CONTRIBUICAO_SEM_PONTUAR",
-            "ERROS_E_RISCOS",
-            "IMPACTO_ESTATISTICO",
-        ]
-
-        df_ranking = df_filtrado[colunas_ranking].sort_values(
-            by="IMPACTO_ESTATISTICO",
-            ascending=False,
-        )
-
-        st.dataframe(
-            df_ranking,
-            use_container_width=True,
-            hide_index=True,
-        )
-
-        st.divider()
-
-        # ====================================================
-        # GRÁFICO 1 - PONTOS POR JOGADOR
-        # ====================================================
-
-        st.subheader("Pontos por jogador")
-
-        df_pontos = df_filtrado.sort_values("PONTOS", ascending=False)
-
-        fig_pontos = px.bar(
-            df_pontos,
-            x="JOGADOR",
-            y="PONTOS",
-            color="TIME",
-            text="PONTOS",
-            hover_data=[
-                "TIME",
-                "MINUTOS",
-                "REBOTES",
-                "ASSISTENCIAS",
-                "PRA",
-                "APROVEITAMENTO_GERAL_%",
-            ],
-            title="Pontuação dos jogadores",
-        )
-
-        fig_pontos.update_layout(
-            xaxis_title="Jogador",
-            yaxis_title="Pontos",
-            legend_title="Time",
-        )
-
-        st.plotly_chart(fig_pontos, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 2 - PRA
-        # ====================================================
-
-        st.subheader("PRA por jogador")
-
-        df_pra = df_filtrado.sort_values("PRA", ascending=False)
-
-        fig_pra = px.bar(
-            df_pra,
-            x="JOGADOR",
-            y="PRA",
-            color="TIME",
-            text="PRA",
-            hover_data=[
-                "PONTOS",
-                "REBOTES",
-                "ASSISTENCIAS",
-                "MINUTOS",
-                "PLUS_MINUS",
-            ],
-            title="Pontos + Rebotes + Assistências por jogador",
-        )
-
-        fig_pra.update_layout(
-            xaxis_title="Jogador",
-            yaxis_title="PRA",
-            legend_title="Time",
-        )
-
-        st.plotly_chart(fig_pra, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 3 - IMPACTO ESTATÍSTICO
-        # ====================================================
-
-        st.subheader("Impacto estatístico por jogador")
-
-        df_impacto = df_filtrado.sort_values(
-            "IMPACTO_ESTATISTICO",
-            ascending=False,
-        )
-
-        fig_impacto = px.bar(
-            df_impacto,
-            x="JOGADOR",
-            y="IMPACTO_ESTATISTICO",
-            color="TIME",
-            text="IMPACTO_ESTATISTICO",
-            hover_data=[
-                "PONTOS",
-                "REBOTES",
-                "ASSISTENCIAS",
-                "ROUBOS",
-                "BLOQUEIOS",
-                "TURNOVERS",
-                "FALTAS",
-                "PLUS_MINUS",
-            ],
-            title="Impacto estatístico dos jogadores",
-        )
-
-        fig_impacto.update_layout(
-            xaxis_title="Jogador",
-            yaxis_title="Impacto estatístico",
-            legend_title="Time",
-        )
-
-        st.plotly_chart(fig_impacto, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 4 - APROVEITAMENTO GERAL
-        # ====================================================
-
-        st.subheader("Aproveitamento geral de arremessos")
-
-        df_aproveitamento = df_filtrado[df_filtrado["TOTAL_ARREMESSOS"] > 0].sort_values(
-            "APROVEITAMENTO_GERAL_%",
-            ascending=False,
-        )
-
-        if df_aproveitamento.empty:
-            st.info("Ainda não há arremessos suficientes para calcular aproveitamento.")
-        else:
-            fig_aproveitamento = px.bar(
-                df_aproveitamento,
-                x="JOGADOR",
-                y="APROVEITAMENTO_GERAL_%",
-                color="TIME",
-                text="APROVEITAMENTO_GERAL_%",
-                hover_data=[
-                    "TOTAL_CONVERTIDOS",
-                    "TOTAL_ARREMESSOS",
-                    "APROVEITAMENTO_2P_%",
-                    "APROVEITAMENTO_3P_%",
-                ],
-                title="Aproveitamento geral de arremessos por jogador",
-            )
-
-            fig_aproveitamento.update_layout(
-                xaxis_title="Jogador",
-                yaxis_title="Aproveitamento %",
-                legend_title="Time",
-            )
-
-            st.plotly_chart(fig_aproveitamento, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 5 - PONTOS, REBOTES E ASSISTÊNCIAS
-        # ====================================================
-
-        st.subheader("Comparação: pontos, rebotes e assistências")
-
-        df_comparativo = df_filtrado.sort_values("PRA", ascending=False)
-
-        fig_comparativo = px.bar(
-            df_comparativo,
-            x="JOGADOR",
-            y=["PONTOS", "REBOTES", "ASSISTENCIAS"],
-            barmode="group",
-            title="Comparativo de pontos, rebotes e assistências",
-        )
-
-        fig_comparativo.update_layout(
-            xaxis_title="Jogador",
-            yaxis_title="Quantidade",
-            legend_title="Indicador",
-        )
-
-        st.plotly_chart(fig_comparativo, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 6 - REBOTES X ASSISTÊNCIAS
-        # ====================================================
-
-        st.subheader("Rebotes x Assistências")
-
-        fig_reb_ast = px.scatter(
-            df_filtrado,
-            x="REBOTES",
-            y="ASSISTENCIAS",
-            size="PONTOS",
-            color="TIME",
-            hover_name="JOGADOR",
-            hover_data=[
-                "MINUTOS",
-                "PONTOS",
-                "PRA",
-                "ROUBOS",
-                "BLOQUEIOS",
-                "TURNOVERS",
-                "PLUS_MINUS",
-            ],
-            title="Relação entre rebotes, assistências e pontos",
-        )
-
-        fig_reb_ast.update_layout(
-            xaxis_title="Rebotes",
-            yaxis_title="Assistências",
-            legend_title="Time",
-        )
-
-        st.plotly_chart(fig_reb_ast, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 7 - PARTICIPAÇÃO OFENSIVA
-        # ====================================================
-
-        st.subheader("Participação ofensiva")
-
-        df_ofensiva = df_filtrado.sort_values(
-            "PARTICIPACAO_OFENSIVA",
-            ascending=False,
-        )
-
-        fig_ofensiva = px.bar(
-            df_ofensiva,
-            x="JOGADOR",
-            y="PARTICIPACAO_OFENSIVA",
-            color="TIME",
-            text="PARTICIPACAO_OFENSIVA",
-            hover_data=[
-                "PONTOS",
-                "ASSISTENCIAS",
-                "PRA",
-                "MINUTOS",
-            ],
-            title="Participação ofensiva: pontos + assistências",
-        )
-
-        fig_ofensiva.update_layout(
-            xaxis_title="Jogador",
-            yaxis_title="Pontos + Assistências",
-            legend_title="Time",
-        )
-
-        st.plotly_chart(fig_ofensiva, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 8 - CONTRIBUIÇÃO SEM PONTUAR
-        # ====================================================
-
-        st.subheader("Contribuição sem pontuar")
-
-        df_sem_pontuar = df_filtrado.sort_values(
-            "CONTRIBUICAO_SEM_PONTUAR",
-            ascending=False,
-        )
-
-        fig_sem_pontuar = px.bar(
-            df_sem_pontuar,
-            x="JOGADOR",
-            y="CONTRIBUICAO_SEM_PONTUAR",
-            color="TIME",
-            text="CONTRIBUICAO_SEM_PONTUAR",
-            hover_data=[
-                "REBOTES",
-                "ASSISTENCIAS",
-                "ROUBOS",
-                "BLOQUEIOS",
-                "MINUTOS",
-            ],
-            title="Contribuição sem pontuar: rebotes + assistências + roubos + bloqueios",
-        )
-
-        fig_sem_pontuar.update_layout(
-            xaxis_title="Jogador",
-            yaxis_title="Contribuição",
-            legend_title="Time",
-        )
-
-        st.plotly_chart(fig_sem_pontuar, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 9 - ERROS E RISCOS
-        # ====================================================
-
-        st.subheader("Erros e riscos por jogador")
-
-        df_erros = df_filtrado.sort_values(
-            "ERROS_E_RISCOS",
-            ascending=False,
-        )
-
-        fig_erros = px.bar(
-            df_erros,
-            x="JOGADOR",
-            y="ERROS_E_RISCOS",
-            color="TIME",
-            text="ERROS_E_RISCOS",
-            hover_data=[
-                "TURNOVERS",
-                "FALTAS",
-                "MINUTOS",
-            ],
-            title="Erros e riscos: turnovers + faltas",
-        )
-
-        fig_erros.update_layout(
-            xaxis_title="Jogador",
-            yaxis_title="Turnovers + Faltas",
-            legend_title="Time",
-        )
-
-        st.plotly_chart(fig_erros, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 10 - CESTAS DE 2 PONTOS
-        # ====================================================
-
-        st.subheader("Cestas de 2 pontos")
-
-        df_2p = df_filtrado.sort_values("CESTA_2_TENT", ascending=False)
-
-        fig_2p = px.bar(
-            df_2p,
-            x="JOGADOR",
-            y=["CESTA_2_CONV", "CESTA_2_TENT"],
-            barmode="group",
-            title="Cestas de 2 pontos convertidas x tentadas",
-        )
-
-        fig_2p.update_layout(
-            xaxis_title="Jogador",
-            yaxis_title="Quantidade",
-            legend_title="Indicador",
-        )
-
-        st.plotly_chart(fig_2p, use_container_width=True)
-
-        # ====================================================
-        # GRÁFICO 11 - CESTAS DE 3 PONTOS
-        # ====================================================
-
-        st.subheader("Cestas de 3 pontos")
-
-        df_3p = df_filtrado.sort_values("CESTA_3_TENT", ascending=False)
-
-        fig_3p = px.bar(
-            df_3p,
-            x="JOGADOR",
-            y=["CESTA_3_CONV", "CESTA_3_TENT"],
-            barmode="group",
-            title="Cestas de 3 pontos convertidas x tentadas",
-        )
-
-        fig_3p.update_layout(
-            xaxis_title="Jogador",
-            yaxis_title="Quantidade",
-            legend_title="Indicador",
-        )
-
-        st.plotly_chart(fig_3p, use_container_width=True)
-
-        # ====================================================
-        # TABELA DETALHADA
-        # ====================================================
-
-        st.subheader("Tabela detalhada do jogo")
-
-        colunas_tabela = [
-            "STATUS",
-            "PERIODO",
-            "RELOGIO",
-            "TIME",
-            "JOGADOR",
-            "MINUTOS",
-            "PONTOS",
-            "REBOTES",
-            "ASSISTENCIAS",
-            "PRA",
-            "CESTA_2_CONV",
-            "CESTA_2_TENT",
-            "CESTA_3_CONV",
-            "CESTA_3_TENT",
-            "TOTAL_CONVERTIDOS",
-            "TOTAL_ARREMESSOS",
-            "APROVEITAMENTO_GERAL_%",
-            "APROVEITAMENTO_2P_%",
-            "APROVEITAMENTO_3P_%",
-            "ROUBOS",
-            "BLOQUEIOS",
-            "TURNOVERS",
-            "FALTAS",
-            "PLUS_MINUS",
-            "IMPACTO_ESTATISTICO",
-            "DATA_ATUALIZACAO",
-            "GAME_ID",
-        ]
-
-        st.dataframe(
-            df_filtrado[colunas_tabela].sort_values(
-                by=["TIME", "IMPACTO_ESTATISTICO"],
-                ascending=[True, False],
-            ),
-            use_container_width=True,
-            hide_index=True,
-        )
+    exibir_dashboard(df)
 
 
 # ============================================================
